@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html ng-app="pkt-alumni-front">
+  <head>
+    <script src="./bundle.js"></script>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+    <title>PKT Alumni</title>
+  </head>
+
+  <body>
+    <nav class="light-red lighten-1" role="navigation">
+      <div class="nav-wrapper container">
+        <a id="logo-container" href="#" class="brand-logo">Phi Kappa Tau - Nu Chapter Alumni Database</a>
+      </div>
+    </nav>
+
+    <div class="section no-pad-bot" id="index-banner">
+      <div class="container" ui-view ng-cloak></div>
+    </div>
+  </body>
+
+  <footer class="page-footer">
+    <div class="container">
+      <div class="row">
+        <div class="col l6 s12">
+          <h5 class="white-text"><a class="grey-text text-lighten-4" href="mailto:siddhantdanger@gmail.com?Subject=PKTAlumniFront%20Support" target="_top">Contact Support</a></h5>
+        </div>
+      </div>
+    </div>
+    <div class="footer-copyright">
+      <div class="container">
+      © 2017 Copyright
+      </div>
+    </div>
+  </footer>
+
+  <!--  Scripts-->
+  <script src="js/jquery.js"></script>
+  <script src="js/materialize.js"></script>
+  <script src="js/ng-table.min.js"></script>
+</html>
