@@ -1,35 +1,31 @@
 <!DOCTYPE html>
-<html ng-app="pkt-alumni-front">
+<html class="window-height" ng-app="pkt-alumni-front">
   <head>
     <script src="./bundle.js"></script>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1.0"/>
     <title>PKT Alumni</title>
   </head>
 
-  <body>
-    <nav class="light-red lighten-1" role="navigation">
+  <body class="window-height grey lighten-3">
+    <nav class="light-blue darken-4" role="navigation">
       <div class="nav-wrapper container">
-        <a id="logo-container" href="#" class="brand-logo">Phi Kappa Tau - Nu Chapter Alumni Database</a>
+        <a id="logo-container" href="#" class="brand-logo">Phi Kappa Tau - Nu Chapter</a>
       </div>
     </nav>
 
     <div class="section no-pad-bot" id="index-banner">
-      <div class="container" ui-view ng-cloak></div>
+      <div class="container" id="main-container" ui-view ng-cloak></div>
     </div>
   </body>
 
-  <footer class="page-footer">
-    <div class="container">
-      <div class="row">
-        <div class="col l6 s12">
-          <h5 class="white-text"><a class="grey-text text-lighten-4" href="mailto:siddhantdanger@gmail.com?Subject=PKTAlumniFront%20Support" target="_top">Contact Support</a></h5>
-        </div>
+  <footer class="page-footer light-blue darken-4">
+    <div class="row">
+      <div class="col s6 left">
+        <a class="grey-text text-lighten-4" href="mailto:siddhantdanger@gmail.com?Subject=PKTAlumniFront%20Support" target="_top">Contact Support</a>
       </div>
-    </div>
-    <div class="footer-copyright">
-      <div class="container">
-      © 2017 Copyright
+      <div class="col s6 right">
+        <span class="grey-text right text-lighten-4">© 2017 Copyright</span>
       </div>
     </div>
   </footer>
