@@ -16,7 +16,7 @@ module.exports = Angular.module('pkt-alumni-front.account', [
 
 var Config = require('../../config');
 
-module.exports = function ($scope, $cookies, $stateParams, $state) {
+module.exports = function ($scope, $cookies, $stateParams, $analytics, $state) {
 
   var getRandomInt = function(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min);
@@ -27,11 +27,9 @@ module.exports = function ($scope, $cookies, $stateParams, $state) {
   $cookies.put('ln_state', nonce);
   $scope.authLink = 'https://pktalumni.herokuapp.com' + '/v1/linkedin/auth/start?nonce=' + nonce;
 
-  $scope.setupGA = (ga) => {
-    $scope.ga = ga;
-    console.log($scope.ga)
-  };
-
+  $scope.loginClicked = () => {
+    $analytics.eventTrack('login-clicked', {  category: 'login-clicked', label: 'login-clicked'});
+  }
 };
 
 },{"../../config":5}],3:[function(require,module,exports){
@@ -41,18 +39,24 @@ var Angular = require('angular');
 var Cookies = require('angular-cookies');
 var Router  = require('angular-ui-router');
 
+require('angulartics')
+
+var AngularticsGA = require('angulartics-google-analytics');
+
 var Controller = require('./controller');
 var State      = require('./state');
 
 module.exports = Angular.module('pkt-alumni-front.account.login', [
   Cookies,
-  Router
+  Router,
+  'angulartics',
+  AngularticsGA
 ])
 .controller('LoginCtrl', Controller)
 .config(State)
 .name;
 
-},{"./controller":2,"./state":4,"angular":29,"angular-cookies":26,"angular-ui-router":27}],4:[function(require,module,exports){
+},{"./controller":2,"./state":4,"angular":29,"angular-cookies":26,"angular-ui-router":27,"angulartics":33,"angulartics-google-analytics":31}],4:[function(require,module,exports){
 'use strict';
 
 var HTML = require('../../views/account/login.html');
@@ -91,9 +95,6 @@ module.exports = function ($scope, $state, $location, $cookies, NgTableParams, $
 
   $scope.preview = {};
 
-  $analytics.pageTrack('/home');
-  $analytics.eventTrack('click', {  category: 'category', label: 'label', name: 'haha', linkedin_id: 'asdfa' });
-
   var cookieState = $cookies.get('ln_state');
   var ln_access_token = $location.search().access_token;
 
@@ -107,6 +108,8 @@ module.exports = function ($scope, $state, $location, $cookies, NgTableParams, $
     return;
   }
 
+  $analytics.pageTrack('/home');
+
   $location.url($location.path());
 
   $scope.profile = {
@@ -117,6 +120,10 @@ module.exports = function ($scope, $state, $location, $cookies, NgTableParams, $
   .then((response) => {
     $scope.profile = response.profile || {};
     $scope.profile.status = response.exists ? 'exists' : 'new';
+
+    var id = response.profile.linkedin_id || 'none';
+
+    $analytics.eventTrack('home-loaded', {  category: id, label: 'logged in'});
   });
 
   $scope.getJobTypes = function () {
@@ -179,19 +186,26 @@ module.exports = function ($scope, $state, $location, $cookies, NgTableParams, $
   $scope.alumniTable = new NgTableParams({ count: 10 }, {
     counts: [],
     getData: function (params) {
-      //var filter = params.filter ? params.filter() : undefined;
+      var filter = params.filter ? params.filter() : undefined;
 
-      return API.getBrothers()//filter)
+      if (filter) {
+        var id = $scope.profile ? $scope.profile.id || 'none' : 'none';
+
+        $analytics.eventTrack('filtering', {  category: id, label: 'filtering'});
+      }
+
+      return API.getBrothers(filter)
       .then((brothers) => {
         params.total(brothers.length);
 
-        var filteredData = params.filter() ? $filter('filter')(brothers, params.filter()) : brothers;
+        var filteredData = filter ? $filter('filter')(brothers, filter) : brothers;
         return filteredData.slice((params.page() - 1) * params.count(), params.page() * params.count());
       });
   }});
 
   $scope.addProfile = function () {
     $scope.profile.status = 'adding';
+
 
     var payload = {
       firstname: $scope.profile.firstname,
@@ -202,6 +216,13 @@ module.exports = function ($scope, $state, $location, $cookies, NgTableParams, $
       email: $scope.profile.email,
       linkedin_id: $scope.profile.linkedin_id
     };
+
+    if (Object.keys(payload).length != 7) {
+      alert('Please fill out all the fields.');
+      return;
+    }
+
+    $analytics.eventTrack('adding-self', {  category: $scope.profile.id, label: 'adding-self'});
 
     API.addBrother(payload)
     .then((brother) => {
@@ -410,7 +431,7 @@ module.exports = require('sassify').byUrl('data:text/css;base64,Lm5nLXRhYmxlIHRo
 },{"sassify":36}],18:[function(require,module,exports){
 module.exports = require('sassify').byUrl('data:text/css;base64,LyogQ3VzdG9tIFN0eWxlc2hlZXQgKi8KLyoqCiAqIFVzZSB0aGlzIGZpbGUgdG8gb3ZlcnJpZGUgTWF0ZXJpYWxpemUgZmlsZXMgc28geW91IGNhbiB1cGRhdGUKICogdGhlIGNvcmUgTWF0ZXJpYWxpemUgZmlsZXMgaW4gdGhlIGZ1dHVyZQogKgogKiBNYWRlIEJ5IE1hdGVyaWFsaXplQ1NTLmNvbQogKi8KQGltcG9ydCB1cmwoImh0dHBzOi8vZm9udHMuZ29vZ2xlYXBpcy5jb20vY3NzP2ZhbWlseT1Sb2JvdG86MTAwLDQwMCIpOwouaWNvbi1ibG9jayB7CiAgcGFkZGluZzogMCAxNXB4OyB9CgouaWNvbi1ibG9jayAubWF0ZXJpYWwtaWNvbnMgewogIGZvbnQtc2l6ZTogaW5oZXJpdDsgfQoKLmxpbmtlZGluLWJ1dHRvbiB7CiAgaGVpZ2h0OiA0MHB4OwogIHdpZHRoOiAyOTJweDsgfQoKLnRhYmxlIHNlbGVjdCB7CiAgZGlzcGxheTogaW5saW5lOyB9CgpuYXYgLmJyYW5kLWxvZ28gewogIGZvbnQtZmFtaWx5OiAiUm9ib3RvIiwgc2Fucy1zZXJpZjsKICBmb250LXdlaWdodDogMTAwOwogIGZvbnQtc2l6ZTogMS41ZW07IH0KCiNsb2dpbi1ib3ggewogIHBhZGRpbmctdG9wOiAyMHB4OyB9CgojbG9naW4tYm94IHNwYW4gewogIGZvbnQtZmFtaWx5OiAiUm9ib3RvIiwgc2Fucy1zZXJpZjsKICBmb250LXdlaWdodDogMzAwOwogIGZvbnQtc2l6ZTogMS41ZW07IH0KCmZvb3RlciB7CiAgcG9zaXRpb246IGZpeGVkOwogIGxlZnQ6IDA7CiAgcmlnaHQ6IDA7CiAgYm90dG9tOiAwOwogIHBhZGRpbmctdG9wOiAxNXB4ICFpbXBvcnRhbnQ7CiAgaGVpZ2h0OiA1MHB4OyB9Cgpmb290ZXIgZGl2IHsKICBkaXNwbGF5OiBpbmxpbmU7IH0KCi53aW5kb3ctaGVpZ2h0IHsKICBoZWlnaHQ6IDEwMCU7IH0KCiNtYWluLWNvbnRhaW5lciB7CiAgd2lkdGg6IDgwJTsgfQoKI2luZGV4LWJhbm5lciB7CiAgaGVpZ2h0OiA0NTBweDsgfQoKI2luZGV4LWJhbm5lciA+IGRpdiB7CiAgaGVpZ2h0OiBpbmhlcml0OyB9CgoubWFyZ2luLWNlbnRlciB7CiAgbWFyZ2luLXJpZ2h0OiBhdXRvOwogIG1hcmdpbi1sZWZ0OiBhdXRvOwogIHRleHQtYWxpZ246IGNlbnRlcjsKICB3aWR0aDogMTAwJTsgfQoKLm15UHJvZmlsZSB7CiAgbWFyZ2luLXRvcDogMzBweDsKICBtYXJnaW4tYm90dG9tOiA3MHB4OwogIHBhZGRpbmctdG9wOiAxMHB4OwogIHBhZGRpbmctYm90dG9tOiAxMHB4OwogIHBhZGRpbmctbGVmdDogNTBweDsKICBwYWRkaW5nLXJpZ2h0OiA1MHB4OwogIGJvcmRlci1yYWRpdXM6IDNweDsgfQoKLm15UHJvZmlsZSAjcHJvZmlsZS1pbnRyby1ib3ggewogIG1hcmdpbi1ib3R0b206IDEwcHg7IH0KCi5teVByb2ZpbGUgI3Byb2ZpbGUtaW50cm8tYm94IGg0IHsKICBmb250LWZhbWlseTogIlJvYm90byIsIHNhbnMtc2VyaWY7CiAgZm9udC13ZWlnaHQ6IDMwMDsKICBmb250LXNpemU6IDJlbTsgfQoKLm15UHJvZmlsZSAjcHJvZmlsZS1mb3JtLWJveCB7CiAgcGFkZGluZy10b3A6IDIwcHg7CiAgcGFkZGluZy1ib3R0b206IDEwcHg7CiAgYm9yZGVyLXJhZGl1czogM3B4OyB9CgoubXlQcm9maWxlIC5pbnB1dC1maWVsZCB7CiAgZGlzcGxheTogaW5saW5lLWJsb2NrOwogIG1hcmdpbjogMTBweDsKICBtYXJnaW4tdG9wOiAyMHB4OyB9Cgojc2VhcmNoLWJ5LXRleHQgaDQgewogIGZvbnQtZmFtaWx5OiAiUm9ib3RvIiwgc2Fucy1zZXJpZjsKICBmb250LXdlaWdodDogMzAwOwogIGZvbnQtc2l6ZTogMmVtOyB9CgouZmlsdGVyLWNlbGwgc2VsZWN0IHsKICBiYWNrZ3JvdW5kLWNvbG9yOiAjZWVlZWVlOwogIGJvcmRlci13aWR0aDogMXB4OwogIGJvcmRlci1zdHlsZTogc29saWQ7CiAgYm9yZGVyLWNvbG9yOiAjYmRiZGJkOyB9CgoubmctdGFibGUgdGJvZHk6YmVmb3JlIHsKICBjb250ZW50OiAiLSI7CiAgZGlzcGxheTogYmxvY2s7CiAgbGluZS1oZWlnaHQ6IDMwcHg7CiAgY29sb3I6IHRyYW5zcGFyZW50OyB9Cgojc2Nyb2xsYWJsZS1hcmVhIHsKICBtYXJnaW46IGF1dG87CiAgd2lkdGg6IDgwJTsKICBoZWlnaHQ6IDE1MHB4OwogIGJvcmRlcjogMnB4IHNvbGlkICNjY2M7CiAgb3ZlcmZsb3cteTogc2Nyb2xsOwogIC8qIDwtLSBoZXJlIGlzIHdoYXQgaXMgaW1wb3J0YW50Ki8gfQoKLm5nLXRhYmxlIHRyIHsKICBsaW5lLWhlaWdodDogMjBweDsgfQoKLm5nLXRhYmxlLXBhZ2VyIHsKICBtYXJnaW4tdG9wOiAxNXB4OyB9CgpAbWVkaWEgb25seSBzY3JlZW4gYW5kIChtaW4td2lkdGg6IDBweCkgYW5kIChtYXgtd2lkdGg6IDQwMHB4KSB7CiAgLm5nLXRhYmxlIHRyIHsKICAgIGxpbmUtaGVpZ2h0OiAyMHB4OyB9IH0KCkBtZWRpYSBvbmx5IHNjcmVlbiBhbmQgKG1pbi13aWR0aDogNDAxcHgpIGFuZCAobWF4LXdpZHRoOiA2MDBweCkgewogIC5uZy10YWJsZSB0ciB7CiAgICBsaW5lLWhlaWdodDogMjVweDsgfSB9CgoucGFnaW5hdGlvbiBsaS5hY3RpdmUgewogIGJhY2tncm91bmQtY29sb3I6ICMwMTU3OWI7CiAgYm9yZGVyLXJhZGl1czogM3B4OyB9CgovKiMgc291cmNlTWFwcGluZ1VSTD1kYXRhOmFwcGxpY2F0aW9uL2pzb247YmFzZTY0LGV3b0pJblpsY25OcGIyNGlPaUF6TEFvSkltWnBiR1VpT2lBaWMzUjViR1V1WTNOeklpd0tDU0p6YjNWeVkyVnpJam9nV3dvSkNTSnpkSGxzWlM1amMzTWlDZ2xkTEFvSkluTnZkWEpqWlhORGIyNTBaVzUwSWpvZ1d3b0pDU0l2S2lCRGRYTjBiMjBnVTNSNWJHVnphR1ZsZENBcUwxeHVMeW9xWEc0Z0tpQlZjMlVnZEdocGN5Qm1hV3hsSUhSdklHOTJaWEp5YVdSbElFMWhkR1Z5YVdGc2FYcGxJR1pwYkdWeklITnZJSGx2ZFNCallXNGdkWEJrWVhSbFhHNGdLaUIwYUdVZ1kyOXlaU0JOWVhSbGNtbGhiR2w2WlNCbWFXeGxjeUJwYmlCMGFHVWdablYwZFhKbFhHNGdLbHh1SUNvZ1RXRmtaU0JDZVNCTllYUmxjbWxoYkdsNlpVTlRVeTVqYjIxY2JpQXFMMXh1WEc1QWFXMXdiM0owSUhWeWJDZ25hSFIwY0hNNkx5OW1iMjUwY3k1bmIyOW5iR1ZoY0dsekxtTnZiUzlqYzNNL1ptRnRhV3g1UFZKdlltOTBiem94TURBc05EQXdKeWs3WEc1Y2JpNXBZMjl1TFdKc2IyTnJJSHRjYmlBZ2NHRmtaR2x1WnpvZ01DQXhOWEI0TzF4dWZWeHVYRzR1YVdOdmJpMWliRzlqYXlBdWJXRjBaWEpwWVd3dGFXTnZibk1nZTF4dVhIUm1iMjUwTFhOcGVtVTZJR2x1YUdWeWFYUTdYRzU5WEc1Y2JpNXNhVzVyWldScGJpMWlkWFIwYjI0Z2UxeHVJQ0JvWldsbmFIUTZJRFF3Y0hnN1hHNGdJSGRwWkhSb09pQXlPVEp3ZUR0Y2JuMWNibHh1TG5SaFlteGxJSE5sYkdWamRDQjdYRzRnSUdScGMzQnNZWGs2SUdsdWJHbHVaVHRjYm4xY2JseHVibUYySUM1aWNtRnVaQzFzYjJkdklIdGNiaUFnWm05dWRDMW1ZVzFwYkhrNklGd2lVbTlpYjNSdlhDSXNJSE5oYm5NdGMyVnlhV1k3WEc0Z0lHWnZiblF0ZDJWcFoyaDBPaUF4TURBN1hHNGdJR1p2Ym5RdGMybDZaVG9nTVM0MVpXMDdYRzU5WEc1Y2JpTnNiMmRwYmkxaWIzZ2dlMXh1SUNCd1lXUmthVzVuTFhSdmNEb2dNakJ3ZUR0Y2JuMWNibHh1STJ4dloybHVMV0p2ZUNCemNHRnVJSHRjYmlBZ1ptOXVkQzFtWVcxcGJIazZJRndpVW05aWIzUnZYQ0lzSUhOaGJuTXRjMlZ5YVdZN1hHNGdJR1p2Ym5RdGQyVnBaMmgwT2lBek1EQTdYRzRnSUdadmJuUXRjMmw2WlRvZ01TNDFaVzA3WEc1OVhHNWNibVp2YjNSbGNpQjdYRzRnSUNBZ2NHOXphWFJwYjI0NklHWnBlR1ZrTzF4dUlDQWdJR3hsWm5RNklEQTdYRzRnSUNBZ2NtbG5hSFE2SURBN1hHNGdJQ0FnWW05MGRHOXRPaUF3TzF4dUlDQWdJSEJoWkdScGJtY3RkRzl3T2lBeE5YQjRJQ0ZwYlhCdmNuUmhiblE3WEc0Z0lDQWdhR1ZwWjJoME9pQTFNSEI0TzF4dWZWeHVYRzVtYjI5MFpYSWdaR2wySUh0Y2JpQWdaR2x6Y0d4aGVUb2dhVzVzYVc1bE8xeHVmVnh1WEc0dWQybHVaRzkzTFdobGFXZG9kQ0I3WEc0Z0lHaGxhV2RvZERvZ01UQXdKVHRjYm4xY2JseHVJMjFoYVc0dFkyOXVkR0ZwYm1WeUlIdGNiaUFnZDJsa2RHZzZJRGd3SlR0Y2JuMWNibHh1STJsdVpHVjRMV0poYm01bGNpQjdYRzRnSUdobGFXZG9kRG9nTkRVd2NIZzdYRzU5WEc1Y2JpTnBibVJsZUMxaVlXNXVaWEkrWkdsMklIdGNiaUFnYUdWcFoyaDBPaUJwYm1obGNtbDBPMXh1ZlZ4dVhHNHViV0Z5WjJsdUxXTmxiblJsY2lCN1hHNGdJRzFoY21kcGJpMXlhV2RvZERvZ1lYVjBienRjYmlBZ2JXRnlaMmx1TFd4bFpuUTZJR0YxZEc4N1hHNGdJSFJsZUhRdFlXeHBaMjQ2SUdObGJuUmxjanRjYmlBZ2QybGtkR2c2SURFd01DVTdYRzU5WEc1Y2JpNXRlVkJ5YjJacGJHVWdlMXh1SUNCdFlYSm5hVzR0ZEc5d09pQXpNSEI0TzF4dUlDQnRZWEpuYVc0dFltOTBkRzl0T2lBM01IQjRPMXh1WEc0Z0lIQmhaR1JwYm1jdGRHOXdPaUF4TUhCNE8xeHVJQ0J3WVdSa2FXNW5MV0p2ZEhSdmJUb2dNVEJ3ZUR0Y2JpQWdjR0ZrWkdsdVp5MXNaV1owT2lBMU1IQjRPMXh1SUNCd1lXUmthVzVuTFhKcFoyaDBPaUExTUhCNE8xeHVYRzRnSUdKdmNtUmxjaTF5WVdScGRYTTZJRE53ZUR0Y2JuMWNibHh1TG0xNVVISnZabWxzWlNBamNISnZabWxzWlMxcGJuUnlieTFpYjNnZ2UxeHVJQ0J0WVhKbmFXNHRZbTkwZEc5dE9pQXhNSEI0TzF4dWZWeHVYRzR1YlhsUWNtOW1hV3hsSUNOd2NtOW1hV3hsTFdsdWRISnZMV0p2ZUNCb05DQjdYRzRnSUdadmJuUXRabUZ0YVd4NU9pQmNJbEp2WW05MGIxd2lMQ0J6WVc1ekxYTmxjbWxtTzF4dUlDQm1iMjUwTFhkbGFXZG9kRG9nTXpBd08xeHVJQ0JtYjI1MExYTnBlbVU2SURKbGJUdGNibjFjYmx4dUxtMTVVSEp2Wm1sc1pTQWpjSEp2Wm1sc1pTMW1iM0p0TFdKdmVDQjdYRzRnSUhCaFpHUnBibWN0ZEc5d09pQXlNSEI0TzF4dUlDQndZV1JrYVc1bkxXSnZkSFJ2YlRvZ01UQndlRHRjYmlBZ1ltOXlaR1Z5TFhKaFpHbDFjem9nTTNCNE8xeHVmVnh1WEc0dWJYbFFjbTltYVd4bElDNXBibkIxZEMxbWFXVnNaQ0I3WEc0Z0lHUnBjM0JzWVhrNklHbHViR2x1WlMxaWJHOWphenRjYmlBZ2JXRnlaMmx1T2lBeE1IQjRPMXh1SUNCdFlYSm5hVzR0ZEc5d09pQXlNSEI0TzF4dWZWeHVYRzRqYzJWaGNtTm9MV0o1TFhSbGVIUWdhRFFnZTF4dUlDQm1iMjUwTFdaaGJXbHNlVG9nWENKU2IySnZkRzljSWl3Z2MyRnVjeTF6WlhKcFpqdGNiaUFnWm05dWRDMTNaV2xuYUhRNklETXdNRHRjYmlBZ1ptOXVkQzF6YVhwbE9pQXlaVzA3WEc1OVhHNWNiaTVtYVd4MFpYSXRZMlZzYkNCelpXeGxZM1FnZTF4dUlDQmlZV05yWjNKdmRXNWtMV052Ykc5eU9pQWpaV1ZsWldWbE8xeHVJQ0JpYjNKa1pYSXRkMmxrZEdnNklERndlRHRjYmlBZ1ltOXlaR1Z5TFhOMGVXeGxPaUJ6YjJ4cFpEdGNiaUFnWW05eVpHVnlMV052Ykc5eU9pQWpZbVJpWkdKa08xeHVmVnh1WEc0dWJtY3RkR0ZpYkdVZ2RHSnZaSGs2WW1WbWIzSmxJSHRjYmlBZ0lDQmpiMjUwWlc1ME9pQmNJaTFjSWp0Y2JpQWdJQ0JrYVhOd2JHRjVPaUJpYkc5amF6dGNiaUFnSUNCc2FXNWxMV2hsYVdkb2REb2dNekJ3ZUR0Y2JpQWdJQ0JqYjJ4dmNqb2dkSEpoYm5Od1lYSmxiblE3WEc1OVhHNWNiaU56WTNKdmJHeGhZbXhsTFdGeVpXRWdlMXh1SUNCdFlYSm5hVzQ2SUdGMWRHODdYRzRnSUhkcFpIUm9PaUE0TUNVN1hHNGdJR2hsYVdkb2REb2dNVFV3Y0hnN1hHNGdJR0p2Y21SbGNqb2dNbkI0SUhOdmJHbGtJQ05qWTJNN1hHNGdJRzkyWlhKbWJHOTNMWGs2SUhOamNtOXNiRHNnTHlvZ1BDMHRJR2hsY21VZ2FYTWdkMmhoZENCcGN5QnBiWEJ2Y25SaGJuUXFMMXh1ZlZ4dVhHNHVibWN0ZEdGaWJHVWdkSElnZTF4dUlDQnNhVzVsTFdobGFXZG9kRG9nTWpCd2VEdGNibjFjYmx4dUxtNW5MWFJoWW14bExYQmhaMlZ5SUh0Y2JpQWdiV0Z5WjJsdUxYUnZjRG9nTVRWd2VEdGNibjFjYmx4dVFHMWxaR2xoSUc5dWJIa2djMk55WldWdUlHRnVaQ0FvYldsdUxYZHBaSFJvT2lBd2NIZ3BJR0Z1WkNBb2JXRjRMWGRwWkhSb09pQTBNREJ3ZUNrZ2UxeHVJQ0F1Ym1jdGRHRmliR1VnZEhJZ2UxeHVJQ0FnSUd4cGJtVXRhR1ZwWjJoME9pQXlNSEI0TzF4dUlDQjlYRzU5WEc1Y2JrQnRaV1JwWVNCdmJteDVJSE5qY21WbGJpQmhibVFnS0cxcGJpMTNhV1IwYURvZ05EQXhjSGdwSUdGdVpDQW9iV0Y0TFhkcFpIUm9PaUEyTURCd2VDa2dlMXh1SUNBdWJtY3RkR0ZpYkdVZ2RISWdlMXh1SUNBZ0lHeHBibVV0YUdWcFoyaDBPaUF5TlhCNE8xeHVJQ0I5WEc1OVhHNWNiaTV3WVdkcGJtRjBhVzl1SUd4cExtRmpkR2wyWlNCN1hHNGdJQ0FnWW1GamEyZHliM1Z1WkMxamIyeHZjam9nSXpBeE5UYzVZanRjYmlBZ0lDQmliM0prWlhJdGNtRmthWFZ6T2lBemNIZzdYRzU5WEc0aUNnbGRMQW9KSW0xaGNIQnBibWR6SWpvZ0lrRkJRVUVzZFVKQlFYVkNPMEZCUTNaQ096czdPenRIUVV0SE8wRkJSVWdzVDBGQlR5eERRVUZETERaRVFVRkpPMEZCUlZvc1FVRkJRU3hYUVVGWExFTkJRVU03UlVGRFZpeFBRVUZQTEVWQlFVVXNUVUZCVHl4SFFVTnFRanM3UVVGRlJDeEJRVUZaTEZkQlFVUXNRMEZCUXl4bFFVRmxMRU5CUVVNN1JVRkRNMElzVTBGQlV5eEZRVUZGTEU5QlFWRXNSMEZEYmtJN08wRkJSVVFzUVVGQlFTeG5Ra0ZCWjBJc1EwRkJRenRGUVVObUxFMUJRVTBzUlVGQlJTeEpRVUZMTzBWQlEySXNTMEZCU3l4RlFVRkZMRXRCUVUwc1IwRkRaRHM3UVVGRlJDeEJRVUZQTEUxQlFVUXNRMEZCUXl4TlFVRk5MRU5CUVVNN1JVRkRXaXhQUVVGUExFVkJRVVVzVFVGQlR5eEhRVU5xUWpzN1FVRkZSQ3hCUVVGSkxFZEJRVVFzUTBGQlF5eFhRVUZYTEVOQlFVTTdSVUZEWkN4WFFVRlhMRVZCUVVVc2IwSkJRWEZDTzBWQlEyeERMRmRCUVZjc1JVRkJSU3hIUVVGSk8wVkJRMnBDTEZOQlFWTXNSVUZCUlN4TFFVRk5MRWRCUTJ4Q096dEJRVVZFTEVGQlFVRXNWVUZCVlN4RFFVRkRPMFZCUTFRc1YwRkJWeXhGUVVGRkxFbEJRVXNzUjBGRGJrSTdPMEZCUlVRc1FVRkJWeXhWUVVGRUxFTkJRVU1zU1VGQlNTeERRVUZETzBWQlEyUXNWMEZCVnl4RlFVRkZMRzlDUVVGeFFqdEZRVU5zUXl4WFFVRlhMRVZCUVVVc1IwRkJTVHRGUVVOcVFpeFRRVUZUTEVWQlFVVXNTMEZCVFN4SFFVTnNRanM3UVVGRlJDeEJRVUZCTEUxQlFVMHNRMEZCUXp0RlFVTklMRkZCUVZFc1JVRkJSU3hMUVVGTk8wVkJRMmhDTEVsQlFVa3NSVUZCUlN4RFFVRkZPMFZCUTFJc1MwRkJTeXhGUVVGRkxFTkJRVVU3UlVGRFZDeE5RVUZOTEVWQlFVVXNRMEZCUlR0RlFVTldMRmRCUVZjc1JVRkJSU3hsUVVGblFqdEZRVU0zUWl4TlFVRk5MRVZCUVVVc1NVRkJTeXhIUVVOb1FqczdRVUZGUkN4QlFVRlBMRTFCUVVRc1EwRkJReXhIUVVGSExFTkJRVU03UlVGRFZDeFBRVUZQTEVWQlFVVXNUVUZCVHl4SFFVTnFRanM3UVVGRlJDeEJRVUZCTEdOQlFXTXNRMEZCUXp0RlFVTmlMRTFCUVUwc1JVRkJSU3hKUVVGTExFZEJRMlE3TzBGQlJVUXNRVUZCUVN4bFFVRmxMRU5CUVVNN1JVRkRaQ3hMUVVGTExFVkJRVVVzUjBGQlNTeEhRVU5hT3p0QlFVVkVMRUZCUVVFc1lVRkJZU3hEUVVGRE8wVkJRMW9zVFVGQlRTeEZRVUZGTEV0QlFVMHNSMEZEWmpzN1FVRkZSQ3hCUVVGakxHRkJRVVFzUjBGQlF5eEhRVUZITEVOQlFVTTdSVUZEYUVJc1RVRkJUU3hGUVVGRkxFOUJRVkVzUjBGRGFrSTdPMEZCUlVRc1FVRkJRU3hqUVVGakxFTkJRVU03UlVGRFlpeFpRVUZaTEVWQlFVVXNTVUZCU3p0RlFVTnVRaXhYUVVGWExFVkJRVVVzU1VGQlN6dEZRVU5zUWl4VlFVRlZMRVZCUVVVc1RVRkJUenRGUVVOdVFpeExRVUZMTEVWQlFVVXNTVUZCU3l4SFFVTmlPenRCUVVWRUxFRkJRVUVzVlVGQlZTeERRVUZETzBWQlExUXNWVUZCVlN4RlFVRkZMRWxCUVVzN1JVRkRha0lzWVVGQllTeEZRVUZGTEVsQlFVczdSVUZGY0VJc1YwRkJWeXhGUVVGRkxFbEJRVXM3UlVGRGJFSXNZMEZCWXl4RlFVRkZMRWxCUVVzN1JVRkRja0lzV1VGQldTeEZRVUZGTEVsQlFVczdSVUZEYmtJc1lVRkJZU3hGUVVGRkxFbEJRVXM3UlVGRmNFSXNZVUZCWVN4RlFVRkZMRWRCUVVrc1IwRkRjRUk3TzBGQlJVUXNRVUZCVnl4VlFVRkVMRU5CUVVNc2EwSkJRV3RDTEVOQlFVTTdSVUZETlVJc1lVRkJZU3hGUVVGRkxFbEJRVXNzUjBGRGNrSTdPMEZCUlVRc1FVRkJPRUlzVlVGQmNFSXNRMEZCUXl4clFrRkJhMElzUTBGQlF5eEZRVUZGTEVOQlFVTTdSVUZETDBJc1YwRkJWeXhGUVVGRkxHOUNRVUZ4UWp0RlFVTnNReXhYUVVGWExFVkJRVVVzUjBGQlNUdEZRVU5xUWl4VFFVRlRMRVZCUVVVc1IwRkJTU3hIUVVOb1FqczdRVUZGUkN4QlFVRlhMRlZCUVVRc1EwRkJReXhwUWtGQmFVSXNRMEZCUXp0RlFVTXpRaXhYUVVGWExFVkJRVVVzU1VGQlN6dEZRVU5zUWl4alFVRmpMRVZCUVVVc1NVRkJTenRGUVVOeVFpeGhRVUZoTEVWQlFVVXNSMEZCU1N4SFFVTndRanM3UVVGRlJDeEJRVUZYTEZWQlFVUXNRMEZCUXl4WlFVRlpMRU5CUVVNN1JVRkRkRUlzVDBGQlR5eEZRVUZGTEZsQlFXRTdSVUZEZEVJc1RVRkJUU3hGUVVGRkxFbEJRVXM3UlVGRFlpeFZRVUZWTEVWQlFVVXNTVUZCU3l4SFFVTnNRanM3UVVGRlJDeEJRVUZuUWl4bFFVRkVMRU5CUVVNc1JVRkJSU3hEUVVGRE8wVkJRMnBDTEZkQlFWY3NSVUZCUlN4dlFrRkJjVUk3UlVGRGJFTXNWMEZCVnl4RlFVRkZMRWRCUVVrN1JVRkRha0lzVTBGQlV5eEZRVUZGTEVkQlFVa3NSMEZEYUVJN08wRkJSVVFzUVVGQllTeFpRVUZFTEVOQlFVTXNUVUZCVFN4RFFVRkRPMFZCUTJ4Q0xHZENRVUZuUWl4RlFVRkZMRTlCUVZFN1JVRkRNVUlzV1VGQldTeEZRVUZGTEVkQlFVazdSVUZEYkVJc1dVRkJXU3hGUVVGRkxFdEJRVTA3UlVGRGNFSXNXVUZCV1N4RlFVRkZMRTlCUVZFc1IwRkRka0k3TzBGQlJVUXNRVUZCWlN4VFFVRk9MRU5CUVVNc1MwRkJTeXhCUVVGQkxFOUJRVThzUTBGQlF6dEZRVU51UWl4UFFVRlBMRVZCUVVVc1IwRkJTVHRGUVVOaUxFOUJRVThzUlVGQlJTeExRVUZOTzBWQlEyWXNWMEZCVnl4RlFVRkZMRWxCUVVzN1JVRkRiRUlzUzBGQlN5eEZRVUZGTEZkQlFWa3NSMEZEZEVJN08wRkJSVVFzUVVGQlFTeG5Ra0ZCWjBJc1EwRkJRenRGUVVObUxFMUJRVTBzUlVGQlJTeEpRVUZMTzBWQlEySXNTMEZCU3l4RlFVRkZMRWRCUVVrN1JVRkRXQ3hOUVVGTkxFVkJRVVVzUzBGQlRUdEZRVU5rTEUxQlFVMHNSVUZCUlN4alFVRmxPMFZCUTNaQ0xGVkJRVlVzUlVGQlJTeE5RVUZQTzBWQlFVVXNhME5CUVd0RExFVkJRM2hFT3p0QlFVVkVMRUZCUVZVc1UwRkJSQ3hEUVVGRExFVkJRVVVzUTBGQlF6dEZRVU5ZTEZkQlFWY3NSVUZCUlN4SlFVRkxMRWRCUTI1Q096dEJRVVZFTEVGQlFVRXNaVUZCWlN4RFFVRkRPMFZCUTJRc1ZVRkJWU3hGUVVGRkxFbEJRVXNzUjBGRGJFSTdPMEZCUlVRc1RVRkJUU3hOUVVGRUxFMUJRVTBzVFVGQlRTeFRRVUZUTEVWQlFVVXNSMEZCUnl4UFFVRlBMRk5CUVZNc1JVRkJSU3hMUVVGTE8wVkJRM0JFTEVGQlFWVXNVMEZCUkN4RFFVRkRMRVZCUVVVc1EwRkJRenRKUVVOWUxGZEJRVmNzUlVGQlJTeEpRVUZMTEVkQlEyNUNPenRCUVVkSUxFMUJRVTBzVFVGQlJDeE5RVUZOTEUxQlFVMHNVMEZCVXl4RlFVRkZMRXRCUVVzc1QwRkJUeXhUUVVGVExFVkJRVVVzUzBGQlN6dEZRVU4wUkN4QlFVRlZMRk5CUVVRc1EwRkJReXhGUVVGRkxFTkJRVU03U1VGRFdDeFhRVUZYTEVWQlFVVXNTVUZCU3l4SFFVTnVRanM3UVVGSFNDeEJRVUZqTEZkQlFVZ3NRMEZCUXl4RlFVRkZMRUZCUVVFc1QwRkJUeXhEUVVGRE8wVkJRMnhDTEdkQ1FVRm5RaXhGUVVGRkxFOUJRVkU3UlVGRE1VSXNZVUZCWVN4RlFVRkZMRWRCUVVrc1IwRkRkRUlpTEFvSkltNWhiV1Z6SWpvZ1cxMEtmUT09ICov');;
 },{"sassify":36}],19:[function(require,module,exports){
-module.exports = "\n<div class=\"row window-height valign-wrapper\" ng-controller=\"LoginCtrl\">\n  <div class=\"col s6 offset-s3 hoverable grey lighten-2\" onload=\"console.log('wheeeeeee!')\" id=\"login-box\">\n    <div class=\"row\">\n      <div class=\"col margin-center\">\n        <span class=\"center-align light-blue-text text-darken-4\">Login with Linkedin</span>\n      </div>\n    </div>\n    <div class=\"row\">\n      <div class=\"col margin-center\">\n        <a href='{{authLink}}' onclick=\"ga('send', 'login-clicked');\"><img src='/assets/linkedin/default.png'/></a>\n      </div>\n    </div>\n  </div>\n</div>\n";
+module.exports = "\n<div class=\"row window-height valign-wrapper\" ng-controller=\"LoginCtrl\">\n  <div class=\"col s6 offset-s3 hoverable grey lighten-2\" onload=\"console.log('wheeeeeee!')\" id=\"login-box\">\n    <div class=\"row\">\n      <div class=\"col margin-center\">\n        <span class=\"center-align light-blue-text text-darken-4\">Login with Linkedin</span>\n      </div>\n    </div>\n    <div class=\"row\">\n      <div class=\"col margin-center\">\n        <a href='{{authLink}}' onclick=\"loginClicked()\"><img src='/assets/linkedin/default.png'/></a>\n      </div>\n    </div>\n  </div>\n</div>\n";
 
 },{}],20:[function(require,module,exports){
 module.exports = "\n<div class=\"row\" ng-controller=\"HomeCtrl\">\n\n  <div class=\"myProfile s10 hoverable light-blue darken-4\" ng-hide=\"profile.status == 'exists'\">\n    <div class=\"row\" id=\"profile-intro-box\">\n      <h4 class=\"left grey-text text-lighten-4 offset-s3\">Hi {{profile.firstname}}, looks like you're new!</h4>\n    </div>\n    <div class=\"row center-align grey lighten-3\" id=\"profile-form-box\">\n      <div>\n        <div class=\"input-field s3 center-align\">\n          <label for=\"firstname\">First Name</label>\n          <input id=\"firstname\" type=\"text\" value='{{profile.firstname}}' class=\"validate active\">\n        </div>\n        <div class=\"input-field s3 center-align\">\n          <label for=\"lastname\">Last Name</label>\n          <input id=\"lastname\" type=\"text\" value='{{profile.lastname}}' class=\"validate active\">\n        </div>\n        <div class=\"input-field s3 center-align\">\n          <label for=\"email\">Email</label>\n          <input id=\"email\" type=\"text\" value='{{profile.email}}' class=\"validate active\">\n        </div>\n      </div>\n      <div>\n        <div class=\"input-field s3 center-align\">\n          <label for=\"job\">Job Title</label>\n          <input id=\"job\" type=\"text\" value='{{profile.job}}' class=\"validate active\">\n        </div>\n        <div class=\"input-field s3 center-align\">\n          <label for=\"jobtype\">Field</label>\n          <input id=\"jobtype\" type=\"text\" value='{{profile.jobtype}}' class=\"validate active\">\n        </div>\n        <div class=\"input-field s3 center-align\">\n          <label for=\"company\">Company</label>\n          <input id=\"company\" type=\"text\" value='{{profile.company}}' lass=\"validate active\">\n        </div>\n      </div>\n    </div>\n    <div class=\"row\">\n      <div class=\"btn-large center-align amber darken-2\" ng-click=\"addProfile()\">\n        <span>Add Myself</span>\n      </div>\n    </div>\n    <div ng-show=\"profile.status == 'adding'\">\n      <div class=\"preloader-wrapper small active\">\n        <div class=\"spinner-layer spinner-yellow-only\">\n          <div class=\"circle-clipper left\">\n            <div class=\"circle\"></div>\n          </div><div class=\"gap-patch\">\n            <div class=\"circle\"></div>\n          </div><div class=\"circle-clipper right\">\n            <div class=\"circle\"></div>\n          </div>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"row\" id=\"search-by-text\">\n    <h4 class=\"center-align light-blue-text text-darken-4\">Search By:</h4>\n  </div>\n\n  <div class=\"row\">\n    <table ng-table=\"alumniTable\" class=\"table striped\" show-filter=\"true\">\n      <tr ng-repeat=\"user in $data\">\n        <td title=\"'First'\" filter=\"{ firstname: 'text' }\" sortable=\"'firstname'\">\n            {{user.firstname}}</td>\n        <td title=\"'Last'\" filter=\"{ lastname: 'text' }\" sortable=\"'lastname'\">\n            {{user.lastname}}</td>\n        <td title=\"'Job'\" filter=\"{ job: 'select' }\" filter-data=\"getJobTitles()\" sortable=\"'job'\">\n            {{user.job}}</td>\n        <td title=\"'Field'\" filter=\"{ jobtype: 'select' }\" filter-data=\"getJobTypes()\" sortable=\"'jobtype'\">\n            {{user.jobtype}}</td>\n        <td title=\"'Company'\" filter=\"{ company: 'select' }\" filter-data=\"getCompanies()\" sortable=\"'company'\">\n            {{user.company}}</td>\n        <td title=\"'Email'\" sortable=\"'email'\">\n            {{user.email}}</td>\n      </tr>\n  </table>\n  </div>\n</div>\n\n<br /><br />\n";
