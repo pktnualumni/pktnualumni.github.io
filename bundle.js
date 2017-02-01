@@ -92,7 +92,7 @@ module.exports = function ($scope, $state, $location, $cookies, NgTableParams, $
   $scope.preview = {};
 
   $analytics.pageTrack('/home');
-  $analytics.eventTrack('click', {  category: 'category', label: 'label' });
+  $analytics.eventTrack('click', {  category: 'category', label: 'label', name: 'haha', linkedin_id: 'asdfa' });
 
   var cookieState = $cookies.get('ln_state');
   var ln_access_token = $location.search().access_token;
